@@ -93,11 +93,9 @@ public interface JsonParser<T> {
 	    var buffer = new StringBuffer();
 	    var parser = parseIf(description, predicate);
 
-	    var result = parser.parse(input);
-	    while (result instanceof Result.Success(var parsedInput, var remainingInput)) {
+	    while (parser.parse(input) instanceof Result.Success(var parsedInput, var remainingInput)) {
 		input = remainingInput;
 		buffer.append(parsedInput);
-		result = parser.parse(input);
 	    }
 
 	    return new Result.Success<>(buffer.toString(), input);
@@ -105,7 +103,7 @@ public interface JsonParser<T> {
     }
 
     static JsonParser<Character> charP(char x) {
-	return parseIf("'" + x + "'", y -> y.equals(x));
+	return parseIf("'" + x + "'", y -> x == y);
     }
 
     static JsonParser<String> stringP(String string) {
@@ -114,16 +112,12 @@ public interface JsonParser<T> {
 	    var buffer = new StringBuffer();
 
 	    for (char c : string.toCharArray()) {
-		var result = charP(c).parse(input);
-
-		if (result instanceof Result.Failure(var __)) {
-		    return new Result.Failure<>(
-			    new JsonException("expeced \"" + string + "\", found \"" + buffer + "\""));
-		}
-
-		if (result instanceof Result.Success(var parsedInput, var remainingInput)) {
+		if (charP(c).parse(input) instanceof Result.Success(var parsedInput, var remainingInput)) {
 		    input = remainingInput;
 		    buffer.append(parsedInput);
+		} else {
+		    return new Result.Failure<>(
+			    new JsonException("expeced \"" + string + "\", found \"" + buffer + "\""));
 		}
 	    }
 

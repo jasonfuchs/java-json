@@ -6,6 +6,7 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import json.JsonValue.JsonBoolean;
+import json.JsonValue.JsonNull;
 import json.JsonValue.JsonNumber;
 
 @FunctionalInterface
@@ -62,9 +63,9 @@ public interface JsonParser<T> {
 	return input -> parse(input).map(mapper);
     }
 
-    default JsonParser<T> or(JsonParser<? extends T> other) {
+    default JsonParser<T> or(Supplier<JsonParser<? extends T>> other) {
 	Objects.requireNonNull(other);
-	return input -> parse(input).or(() -> other.parse(input));
+	return input -> parse(input).or(() -> other.get().parse(input));
     }
 
     static JsonParser<Character> parseIf(String description, Predicate<Character> predicate) {
@@ -125,28 +126,29 @@ public interface JsonParser<T> {
 	};
     }
 
-    static JsonParser<JsonValue> jsonNull() {
+    static JsonParser<JsonNull> jsonNull() {
 	return stringP("null").map(__ -> JsonValue.NULL);
     }
 
-    static JsonParser<JsonValue> jsonTrue() {
+    static JsonParser<JsonBoolean> jsonTrue() {
 	return stringP("true").map(__ -> new JsonBoolean(true));
     }
 
-    static JsonParser<JsonValue> jsonFalse() {
+    static JsonParser<JsonBoolean> jsonFalse() {
 	return stringP("false").map(__ -> new JsonBoolean(false));
     }
 
-    static JsonParser<JsonValue> jsonBoolean() {
-	return jsonTrue().or(jsonFalse());
+    static JsonParser<JsonBoolean> jsonBoolean() {
+	return jsonTrue().or(JsonParser::jsonBoolean);
     }
 
-    static JsonParser<JsonValue> jsonNumber() {
+    static JsonParser<JsonNumber> jsonNumber() {
 	// TODO add decimal support
 	return spanP("a number", Character::isDigit).map(parsedValue -> new JsonNumber(Double.valueOf(parsedValue)));
     }
 
     static JsonParser<JsonValue> jsonValue() {
-	return jsonNull().or(jsonBoolean()).or(jsonNumber());
+	JsonParser<JsonValue> jsonNull = jsonNull().map(Function.identity());
+	return jsonNull.or(JsonParser::jsonBoolean).or(JsonParser::jsonNumber);
     }
 }

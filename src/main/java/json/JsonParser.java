@@ -8,6 +8,7 @@ import java.util.function.Supplier;
 import json.JsonValue.JsonBoolean;
 import json.JsonValue.JsonNull;
 import json.JsonValue.JsonNumber;
+import json.JsonValue.JsonString;
 
 @FunctionalInterface
 public interface JsonParser<T> {
@@ -103,6 +104,15 @@ public interface JsonParser<T> {
 	};
     }
 
+    static JsonParser<String> notEmpty(JsonParser<String> other) {
+	Objects.nonNull(other);
+	return input -> switch (other.parse(input)) {
+	case Result.Success<String> empty when empty.parsedValue.isEmpty() ->
+	    new Result.Failure<>(new JsonException("parsed value is empty"));
+	case Result<String> notEmpty -> notEmpty;
+	};
+    }
+
     static JsonParser<Character> charP(char x) {
 	return parseIf("'" + x + "'", y -> x == y);
     }
@@ -144,7 +154,40 @@ public interface JsonParser<T> {
 
     static JsonParser<JsonNumber> jsonNumber() {
 	// TODO add decimal support
-	return spanP("a number", Character::isDigit).map(parsedValue -> new JsonNumber(Double.valueOf(parsedValue)));
+	return notEmpty(spanP("a number", Character::isDigit))
+		.map(parsedValue -> new JsonNumber(Double.valueOf(parsedValue)));
+    }
+
+    static JsonParser<Character> normalChar() {
+	return parseIf("a non-escaped character", x -> x != '\\' && x != '"');
+    }
+
+    // TODO add support for escaped chars
+    static JsonParser<String> stringLiteral() {
+	return input -> {
+	    return switch (charP('"').parse(input)) {
+	    case Result.Success(var __, var remainingInput) -> {
+		input = remainingInput;
+		var buffer = new StringBuffer();
+
+		while (normalChar().parse(input) instanceof Result.Success(var parsedInput, var _remainingInput)) {
+		    buffer.append(parsedInput);
+		    input = _remainingInput;
+		}
+
+		yield charP('"').parse(input).map(___ -> buffer.toString());
+	    }
+	    case Result.Failure(JsonException exception) -> new Result.Failure<>(exception);
+	    };
+	};
+    }
+
+    static JsonParser<JsonValue> jsonString() {
+	return stringLiteral().map(JsonString::new);
+    }
+
+    static JsonParser<String> ws() {
+	return spanP("whitespace", Character::isWhitespace);
     }
 
     static JsonParser<JsonValue> jsonValue() {
